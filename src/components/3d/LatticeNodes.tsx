@@ -1,26 +1,75 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { HARMONIC_LADDER, RESONANCE_MAP } from "../../lib/resonance-map";
+import { FIXED_SHELLS, CORE_HZ } from "../../lib/field-engine";
 
 interface LatticeNodesProps {
-  hue?: number; // 0-360 (base shift)
-  speed?: number; // 0.1 - 5.0
-  complexity?: number; // 0.1 - 2.0
-  frequency?: number; // 0-1
+  hue?: number; 
+  speed?: number; 
+  complexity?: number; 
+  frequency?: number; 
 }
 
-export function LatticeNodes({ hue = 170, speed = 1.0, complexity = 1.0, frequency = 0.5 }: LatticeNodesProps) {
+function Edges({ nodes, speed, frequency }: { nodes: any[], speed: number, frequency: number }) {
+  const lineRef = useRef<THREE.LineSegments>(null);
+
+  const geometry = useMemo(() => {
+    const points: THREE.Vector3[] = [];
+    
+    // Connect nodes to neighbors in the same shell or adjacent shells
+    nodes.forEach((n1, i) => {
+      // Connect to a few nearby nodes in the same shell
+      let connections = 0;
+      for (let j = i + 1; j < nodes.length && connections < 2; j++) {
+        const n2 = nodes[j];
+        if (n1.shellIdx === n2.shellIdx) {
+          const dist = Math.sqrt((n1.x - n2.x)**2 + (n1.y - n2.y)**2 + (n1.z - n2.z)**2);
+          if (dist < 4) {
+            points.push(new THREE.Vector3(n1.x, n1.y, n1.z));
+            points.push(new THREE.Vector3(n2.x, n2.y, n2.z));
+            connections++;
+          }
+        }
+      }
+
+      // Connect to parent shell nodes
+      if (n1.shellIdx > 0) {
+        const parentNodes = nodes.filter(n => n.shellIdx === n1.shellIdx - 1);
+        const parent = parentNodes[Math.floor(Math.random() * parentNodes.length)];
+        if (parent) {
+          points.push(new THREE.Vector3(n1.x, n1.y, n1.z));
+          points.push(new THREE.Vector3(parent.x, parent.y, parent.z));
+        }
+      }
+    });
+
+    return new THREE.BufferGeometry().setFromPoints(points);
+  }, [nodes]);
+
+  useFrame((state) => {
+    if (!lineRef.current) return;
+    const time = state.clock.elapsedTime * speed;
+    const pulse = 0.1 + Math.sin(time * frequency) * 0.05;
+    (lineRef.current.material as THREE.LineBasicMaterial).opacity = pulse;
+  });
+
+  return (
+    <lineSegments ref={lineRef} geometry={geometry}>
+      <lineBasicMaterial color="#00f5d4" transparent opacity={0.1} blending={THREE.AdditiveBlending} />
+    </lineSegments>
+  );
+}
+
+export function LatticeNodes({ speed = 1.0, complexity = 1.0, frequency = 0.5 }: LatticeNodesProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   
-  // Create nodes distributed across harmonic shells
   const nodes = useMemo(() => {
     const temp = [];
-    const pointsPerShell = 50; 
+    const pointsPerShell = 32; 
 
-    HARMONIC_LADDER.forEach((shell, shellIdx) => {
-      const radius = shell.radius * 5; // Scale radius for visibility
-      const count = Math.floor(pointsPerShell * complexity);
+    FIXED_SHELLS.forEach((shell, shellIdx) => {
+      const radius = shell.radius * 8; 
+      const count = shell.id === 'core' ? 1 : Math.floor(pointsPerShell * complexity * (shellIdx + 0.5));
       
       for (let i = 0; i < count; i++) {
         const phi = Math.acos(-1 + (2 * i) / count);
@@ -42,16 +91,6 @@ export function LatticeNodes({ hue = 170, speed = 1.0, complexity = 1.0, frequen
       }
     });
 
-    // Add Core Node specifically
-    temp.push({
-      x: 0, y: 0, z: 0,
-      originRadius: 0,
-      phi: 0, theta: 0,
-      hz: RESONANCE_MAP.core.hz,
-      color: new THREE.Color(RESONANCE_MAP.core.color),
-      shellIdx: -1
-    });
-
     return temp;
   }, [complexity]);
 
@@ -62,23 +101,17 @@ export function LatticeNodes({ hue = 170, speed = 1.0, complexity = 1.0, frequen
     const time = state.clock.elapsedTime * speed;
     
     nodes.forEach((n, i) => {
-      // Oscillation speed tied to real frequency (scaled down for stability)
-      const freqScalar = (n.hz / 167.89) * frequency;
-      const pulse = Math.sin(time * freqScalar + i) * 0.2;
+      const freqScalar = (n.hz / CORE_HZ) * frequency;
+      const pulse = Math.sin(time * freqScalar + i) * 0.15;
       
-      // Floating motion on the shell
       const r = n.originRadius + pulse;
-      const x = r * Math.sin(n.phi + time * 0.1) * Math.cos(n.theta + time * 0.05);
-      const y = r * Math.sin(n.phi + time * 0.1) * Math.sin(n.theta + time * 0.05);
-      const z = r * Math.cos(n.phi + time * 0.1);
+      const x = r * Math.sin(n.phi + time * 0.05) * Math.cos(n.theta + time * 0.02);
+      const y = r * Math.sin(n.phi + time * 0.05) * Math.sin(n.theta + time * 0.02);
+      const z = r * Math.cos(n.phi + time * 0.05);
 
       dummy.position.set(x, y, z);
-      const scale = 0.05 + (pulse * 0.1); 
+      const scale = n.shellIdx === 0 ? 0.3 : 0.08 + (pulse * 0.05); 
       dummy.scale.setScalar(Math.max(0.01, scale));
-      
-      // Rotate node based on identity
-      dummy.rotation.x = time * 0.2;
-      dummy.rotation.y = time * 0.3;
       
       dummy.updateMatrix();
       meshRef.current!.setMatrixAt(i, dummy.matrix);
@@ -91,14 +124,16 @@ export function LatticeNodes({ hue = 170, speed = 1.0, complexity = 1.0, frequen
 
   return (
     <group>
+      <Edges nodes={nodes} speed={speed} frequency={frequency} />
       <instancedMesh ref={meshRef} args={[undefined, undefined, nodes.length]}>
-        <boxGeometry args={[1, 1, 1]} /> 
+        <sphereGeometry args={[0.08, 12, 12]} /> 
         <meshStandardMaterial 
-          emissiveIntensity={2} 
+          emissiveIntensity={4} 
           transparent 
-          opacity={0.8}
-          metalness={1}
-          roughness={0}
+          opacity={0.95}
+          metalness={0.8}
+          roughness={0.1}
+          emissive="#ffffff"
         />
       </instancedMesh>
     </group>

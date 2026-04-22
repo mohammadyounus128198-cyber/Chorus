@@ -38,10 +38,12 @@ export function CommandInput({ onCommand }: CommandInputProps) {
         alert("Invalid range: Hue shift must be between -180 and 180");
         return;
       }
+    } else if (action === "reset" || action === "capture") {
+      // Valid commands, no numeric validation needed
     } else {
       console.log("Unknown command:", action);
       if (action !== "help") {
-         alert("Unknown command. Try: speed <0-2.5>, freq <0.4-4.2>, complexity <1-7>, hue <-180-180>");
+         alert("Unknown command. Try: speed, freq, complexity, hue, reset, capture");
          return;
       }
     }

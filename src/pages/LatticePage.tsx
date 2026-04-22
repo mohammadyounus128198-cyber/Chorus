@@ -1,13 +1,22 @@
-import { motion } from "motion/react";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from "react";
 import { LatticeScene } from "../components/3d/LatticeScene";
 import { CommandInput } from "../components/CommandInput";
-import { GlassHUD } from "../components/GlassHUD";
 import { Notifications } from "../components/Notifications";
-import { cn } from "@/src/lib/utils";
-import { Activity, Shield, Zap, Database, Terminal, Cpu, Camera, Link as LinkIcon, Box, Share2, Layers } from "lucide-react";
-import { DEFAULT_PLATES, DEFAULT_TRANSITIONS, PlateId, INFINITY_CORE } from "../lib/nonagram-codex";
-import { HARMONIC_LADDER, RESONANCE_MAP } from "../lib/resonance-map";
+import { Badge } from "../components/lattice/Badge";
+import { LatticeHUD } from "../components/lattice/LatticeHUD";
+import { 
+  Camera, 
+  Box,
+  RefreshCw 
+} from "lucide-react";
+import { DEFAULT_PLATES, DEFAULT_TRANSITIONS, INFINITY_CORE } from "../lib/nonagram-codex";
+import { CORE_HZ } from "../lib/field-engine";
+
+// 1. Code-splitting secondary panels
+const TelemetryRail = lazy(() => import("../components/lattice/TelemetryRail"));
+const HarmonicBreakdown = lazy(() => import("../components/lattice/HarmonicBreakdown"));
+const MetadataOverlay = lazy(() => import("../components/lattice/MetadataOverlay"));
 
 interface ResonanceParams {
   hueShift: number;
@@ -19,17 +28,34 @@ interface ResonanceParams {
 }
 
 export default function LatticePage() {
-  const [resParams, setResParams] = useState({
+  // 1. Core Runtime State (Synced from Tuner)
+  const [runtimeParams, setRuntimeParams] = useState({
     hue: 170,
     speed: 1.0,
     complexity: 1.0,
-    frequency: 0.5
+    frequency: 1.0 // Normalized to 1.0x CORE_HZ
   });
+
+  // 2. Local Override State (Dashboard Tuning)
+  const [localParams, setLocalParams] = useState({
+    hue: 170,
+    speed: 1.0,
+    complexity: 1.0,
+    frequency: 1.0,
+    isOverridden: false
+  });
+
   const [isSynced, setIsSynced] = useState(false);
   const [currentPlateIdx, setCurrentPlateIdx] = useState(0);
   const [lastLinkTimestamp, setLastLinkTimestamp] = useState(0);
+  const [showMetadata, setShowMetadata] = useState(false);
 
-  // Nonagram Sequence Animation (Phi-governed: 2.618s cycle)
+  // 3. Derived Effective Params
+  const effectiveParams = useMemo(() => {
+    return localParams.isOverridden ? localParams : runtimeParams;
+  }, [localParams, runtimeParams]);
+
+  // Nonagram Sequence Animation
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentPlateIdx(prev => (prev + 1) % DEFAULT_PLATES.length);
@@ -39,25 +65,17 @@ export default function LatticePage() {
 
   const activePlate = useMemo(() => DEFAULT_PLATES[currentPlateIdx], [currentPlateIdx]);
 
-  // Sync Logic Constants
-  const LINK_MAX_AGE_MS = 500;
-  const LINK_SOURCE = 'resonance-tuner';
-
-  // Sync Listener with Polling Fallback
+  // Sync Listener Logic
   useEffect(() => {
-    let hideTimer: NodeJS.Timeout;
-
+    const LINK_MAX_AGE_MS = 1000;
     const handleSync = () => {
       const stored = localStorage.getItem('lumina-wave-params');
       if (stored) {
         try {
           const payload: ResonanceParams = JSON.parse(stored);
-          const now = Date.now();
-          const age = now - payload.timestamp;
-          
-          // Formal Verification & Throttling
-          if (payload.source === LINK_SOURCE && age < LINK_MAX_AGE_MS && payload.timestamp > lastLinkTimestamp) {
-            setResParams({
+          const age = Date.now() - payload.timestamp;
+          if (age < LINK_MAX_AGE_MS && payload.timestamp > lastLinkTimestamp) {
+            setRuntimeParams({
               hue: 170 + (payload.hueShift || 0),
               speed: payload.speed ?? 1.0, 
               complexity: (payload.complexity ?? 3) / 3.5,
@@ -65,332 +83,191 @@ export default function LatticePage() {
             });
             setIsSynced(true);
             setLastLinkTimestamp(payload.timestamp);
-
-            // Auto-hide link status if signal is lost
-            clearTimeout(hideTimer);
-            hideTimer = setTimeout(() => {
-              if (Date.now() - payload.timestamp > LINK_MAX_AGE_MS) {
-                setIsSynced(false);
-              }
-            }, LINK_MAX_AGE_MS + 100);
+          } else if (age > LINK_MAX_AGE_MS) {
+            setIsSynced(false);
           }
         } catch (e) {
-          console.error("DAN-Ω Link Error:", e);
+          console.error("Sync Error:", e);
         }
       }
     };
-
-    window.addEventListener('storage', handleSync);
-    const pollInterval = setInterval(handleSync, 100); // 10Hz polling fallback
-    
-    handleSync();
-    return () => {
-      window.removeEventListener('storage', handleSync);
-      clearInterval(pollInterval);
-      clearTimeout(hideTimer);
-    };
+    const poll = setInterval(handleSync, 200);
+    return () => clearInterval(poll);
   }, [lastLinkTimestamp]);
 
-  const captureScreen = useCallback(() => {
-    const canvas = document.querySelector('canvas');
-    if (!canvas) return;
+  // 2. Dynamic import for html2canvas
+  const captureScreen = useCallback(async () => {
+    const stage = document.getElementById('dashboard-stage');
+    if (!stage) return;
 
-    // Create a temporary canvas for composition
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const ctx = tempCanvas.getContext('2d');
-    if (!ctx) return;
+    setShowMetadata(true); 
+    
+    setTimeout(async () => {
+      try {
+        const html2canvas = (await import("html2canvas")).default;
+        const canvas = await html2canvas(stage, {
+          backgroundColor: '#020408',
+          scale: 2,
+          useCORS: true
+        });
+        const link = document.createElement('a');
+        link.download = `resonance_capture_${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      } finally {
+        setShowMetadata(false);
+      }
+    }, 100);
+  }, []);
 
-    // Draw background and Three.js canvas
-    ctx.fillStyle = '#05070a';
-    ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-    ctx.drawImage(canvas, 0, 0);
+  const resetToLive = () => {
+    setLocalParams(prev => ({ ...prev, isOverridden: false }));
+  };
 
-    // Render metadata
-    ctx.font = '12px "JetBrains Mono"';
-    ctx.fillStyle = '#00f5d4';
-    const metadata = [
-      `CHORUS // RESONANCE_CAPTURE`,
-      `TIMESTAMP: ${new Date().toISOString()}`,
-      `HUE: ${resParams.hue.toFixed(1)}`,
-      `SPEED: ${resParams.speed.toFixed(2)}`,
-      `COMPLEXITY: ${resParams.complexity.toFixed(2)}`,
-      `FREQUENCY: ${resParams.frequency.toFixed(2)}`,
-      `SIGNATURE: AUTHORIZED_BY_ROOT`
-    ];
-
-    metadata.forEach((text, i) => {
-      ctx.fillText(text, 20, tempCanvas.height - 120 + (i * 18));
-    });
-
-    // Decorative corner
-    ctx.strokeStyle = '#00f5d4';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(10, 10); ctx.lineTo(40, 10);
-    ctx.moveTo(10, 10); ctx.lineTo(10, 40);
-    ctx.stroke();
-
-    // Trigger download
-    const link = document.createElement('a');
-    link.download = `chorus_resonance_${Date.now()}.png`;
-    link.href = tempCanvas.toDataURL('image/png');
-    link.click();
-  }, [resParams]);
-
-  // Command Input Handler for Manual Operation
-  const handleManualCommand = useCallback((action: string, valueStr: string) => {
+  const handleCommand = useCallback((action: string, valueStr: string) => {
     const val = parseFloat(valueStr);
+    
+    if (action === "reset") {
+      resetToLive();
+      return;
+    }
+
+    if (action === "capture") {
+      captureScreen();
+      return;
+    }
+
     if (isNaN(val)) return;
 
-    setResParams(prev => {
-      const next = { ...prev };
+    setLocalParams(prev => {
+      const next = { ...prev, isOverridden: true };
       if (action === "speed") next.speed = val;
       if (action === "freq" || action === "frequency") next.frequency = val / 2;
       if (action === "complexity") next.complexity = val / 3.5;
       if (action === "hue") next.hue = 170 + val;
       return next;
     });
-    
-    // Explicitly transition to operator mode
-    setIsSynced(false);
-  }, []);
+  }, [captureScreen]);
 
   return (
-    <main className="relative h-screen w-full bg-chorus-bg overflow-hidden select-none flex flex-col">
-      {/* Lattice Background Layer */}
-      <div className="lattice-bg" />
-      <LatticeScene 
-        hue={resParams.hue} 
-        speed={resParams.speed} 
-        complexity={resParams.complexity} 
-        frequency={resParams.frequency} 
-      />
-      <Notifications />
-      
-      {/* Top HUD Rail */}
-      <nav className="relative z-10 flex justify-between items-center px-8 py-6">
-        <motion.div 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center space-x-4"
-        >
-          <div className="w-10 h-10 border-2 border-chorus-primary flex items-center justify-center rotate-45">
-            <div className="w-4 h-4 bg-chorus-primary -rotate-45"></div>
+    <main 
+      id="dashboard-stage"
+      className="relative h-screen w-full bg-chorus-bg text-white overflow-hidden flex flex-col font-sans"
+    >
+      {/* 1. TOP RAIL: Runtime Badges & Seals */}
+      <nav className="h-14 border-b border-white/5 bg-black/40 backdrop-blur-xl flex items-center justify-between px-6 z-20">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border border-chorus-primary rotate-45 flex items-center justify-center">
+              <div className="w-2 h-2 bg-chorus-primary shadow-[0_0_8px_white]" />
+            </div>
+            <span className="text-sm font-bold tracking-[0.3em] glow-text uppercase">OMEGA_CORE</span>
           </div>
-          <div className="flex flex-col">
-            <span className="text-2xl font-bold tracking-[0.2em] text-chorus-primary glow-text uppercase leading-none">OMEGA_CORE</span>
-            <span className="text-[8px] font-mono text-chorus-primary/40 tracking-[0.4em] mt-1 italic">FORMALLY_VERIFIED_V8</span>
-          </div>
-        </motion.div>
 
-        <motion.div 
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center space-x-6 text-[10px] tracking-[0.2em] uppercase font-mono"
-        >
-          <div className={cn(
-            "flex items-center gap-2 px-3 py-1 rounded-full border transition-all duration-300",
-            isSynced 
-              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]" 
-              : "bg-white/5 border-white/10 text-white/20"
-          )}>
-            <div className={cn(
-               "w-1.5 h-1.5 rounded-full shadow-[0_0_8px]", 
-               isSynced ? "bg-emerald-400 shadow-emerald-400 animate-pulse" : "bg-white/20"
-            )} />
-            <span>{isSynced ? "RESONANCE_LINKED" : "LINK_WAITING"}</span>
+          <div className="h-4 w-[1px] bg-white/10 hidden md:block" />
+
+          {/* Badges */}
+          <div className="flex items-center gap-2">
+            <Badge 
+              active={localParams.isOverridden} 
+              label="OVERRIDE_ACTIVE" 
+              idle="LIVE_SYNC" 
+              color={localParams.isOverridden ? "text-amber-400" : "text-emerald-400"}
+            />
+            <Badge active label="GUARDRAIL: OK" color="text-sky-400" />
+            <Badge active={isSynced} label="LINK: ACTIVE" idle="LINK: PASSIVE" color={isSynced ? "text-emerald-400" : "text-white/20"} />
           </div>
-          
-          <div className="flex items-center space-x-2 text-cyan-400/60">
-            <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.6)]"></span>
-            <span>Lattice Sync: Active</span>
-          </div>
-          <span className="hidden lg:inline text-chorus-primary/40">FREQ: {resParams.frequency.toFixed(2)}</span>
+        </div>
+
+        <div className="flex items-center gap-4">
           <button 
             onClick={() => window.open('/tuner', '_blank')}
-            className="p-2 hover:bg-chorus-primary/10 border border-chorus-primary/30 rounded transition-all group flex items-center gap-2 cursor-pointer"
+            className="flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 rounded-md hover:bg-white/10 transition-colors text-[10px] uppercase font-mono tracking-widest text-chorus-primary"
           >
-            <LinkIcon className="w-3 h-3 group-hover:scale-110 group-hover:rotate-12 outline-none transition-transform text-chorus-primary" />
-            <span className="text-[9px] text-chorus-primary">LAUNCH_TUNER</span>
+            <RefreshCw className="w-3 h-3" />
+            Launch Tuner
           </button>
           <button 
             onClick={captureScreen}
-            className="p-2 hover:bg-chorus-primary/10 border border-white/5 rounded transition-all group flex items-center gap-2"
+            className="flex items-center gap-2 px-3 py-1 bg-chorus-primary/20 border border-chorus-primary/50 text-chorus-primary rounded-md hover:bg-chorus-primary/30 transition-colors text-[10px] uppercase font-mono tracking-widest"
           >
-            <Camera className="w-3 h-3 group-hover:scale-110 transition-transform" />
-            <span className="text-[9px]">RES_CAPTURE</span>
+            <Camera className="w-3 h-3" />
+            Capture
           </button>
-        </motion.div>
+        </div>
       </nav>
 
-      {/* Main Workspace */}
-      <main className="relative z-10 flex-grow flex p-8 gap-8 overflow-hidden">
-        {/* Left Panel */}
-        <div className="w-64 flex flex-col space-y-4">
-          <GlassHUD title="System Overview" delay={0.2} className="h-48 border-white/10">
-            <div className="space-y-4 pt-2">
-              {[
-                { label: "Core Frequency", val: "167.89 Hz", p: 100 },
-                { label: "Resonance Integrity", val: `${(resParams.frequency * 100).toFixed(0)}%`, p: resParams.frequency * 100 },
-              ].map((item, i) => (
-                <div key={i} className="space-y-2">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-white/50">{item.label}</span>
-                    <span className="font-mono text-chorus-primary">{item.val}</span>
-                  </div>
-                  <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${item.p}%` }}
-                      className="bg-chorus-primary h-full shadow-[0_0_10px_rgba(0,245,212,0.3)]" 
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </GlassHUD>
+      {/* 2. MAIN STAGE: Visualization & Telemetry */}
+      <div className="flex-1 relative flex overflow-hidden">
+        {/* Lattice Engine (Full Background within stage) */}
+        <LatticeScene 
+          hue={effectiveParams.hue} 
+          speed={effectiveParams.speed} 
+          complexity={effectiveParams.complexity} 
+          frequency={effectiveParams.frequency}
+        />
 
-          <GlassHUD title="Live Telemetry" delay={0.3} className="flex-1 border-white/10">
-            <div className="h-full flex items-end justify-between space-x-1 pt-4 pb-2">
-              {[...HARMONIC_LADDER].reverse().map((shell, i) => (
-                <motion.div 
-                  key={i}
-                  initial={{ height: 0 }}
-                  animate={{ height: `${(shell.hz / 1007.34) * 100}%` }}
-                  style={{ backgroundColor: shell.color }}
-                  className="w-full opacity-60 transition-colors"
-                />
-              ))}
-            </div>
-          </GlassHUD>
-        </div>
+        <LatticeHUD />
 
-        {/* Center Visual Field (Radial Energy Map) */}
-        <div className="flex-grow flex items-center justify-center relative pointer-events-none">
-           <div className="relative w-80 h-80 flex items-center justify-center">
-              {[...HARMONIC_LADDER].reverse().map((shell, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ 
-                    scale: 1 + resParams.frequency * 0.1, 
-                    opacity: 1 - (shell.radius * 0.15)
-                  }}
-                  style={{ 
-                    backgroundColor: shell.color,
-                    width: `${(6 - shell.radius) * 45}px`,
-                    height: `${(6 - shell.radius) * 45}px`,
-                    zIndex: -i
-                  }}
-                  className="absolute rounded-full blur-[45px] opacity-20"
-                />
-              ))}
-              <div className="w-16 h-16 bg-[#ff3300] rounded-full blur-xl animate-pulse shadow-[0_0_40px_#ff3300]" />
-              <div className="absolute text-white text-[10px] font-mono tracking-[0.5em] glow-text top-full mt-8 uppercase">
-                 Resonance_Map // {RESONANCE_MAP.core.hz} Hz
-              </div>
-           </div>
-        </div>
+        <Notifications />
 
-        {/* Right Panel */}
-        <div className="w-72 flex flex-col space-y-4">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-1 px-1 flex items-center justify-between">
-            <span>Nonagram Architecture</span>
-            <span className="text-chorus-primary font-mono text-[8px] animate-pulse">SEALED</span>
-          </div>
-          
-          <div className="space-y-3">
-            <motion.div
-              key={activePlate.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white/5 border border-chorus-primary/20 backdrop-blur-md p-4 rounded-lg relative overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 p-2 opacity-20">
-                <Box className="w-8 h-8 text-chorus-primary" />
-              </div>
-              <div className="text-[10px] text-chorus-primary font-mono mb-1">Plate {activePlate.id}</div>
-              <div className="text-sm font-bold text-white tracking-widest uppercase mb-1">{activePlate.name}</div>
-              <div className="text-[10px] text-white/50 mb-3">{activePlate.role}</div>
-              
-              <div className="flex items-center gap-2">
-                <div className="text-[9px] px-1.5 py-0.5 bg-chorus-primary/10 text-chorus-primary border border-chorus-primary/20 rounded font-mono">
-                  {activePlate.stateType}
-                </div>
-                <div className="h-[1px] flex-grow bg-white/10" />
-                <div className="text-[9px] text-white/30 font-mono">
-                  → {DEFAULT_TRANSITIONS[activePlate.id] === INFINITY_CORE ? "∞" : DEFAULT_TRANSITIONS[activePlate.id]}
-                </div>
-              </div>
-            </motion.div>
+        {/* Telemetry Rail (Right) - Deferred via Suspense */}
+        <Suspense fallback={null}>
+          <TelemetryRail 
+            effectiveParams={effectiveParams}
+            localParams={localParams}
+            setLocalParams={setLocalParams}
+            resetToLive={resetToLive}
+          />
+        </Suspense>
 
-            <div className="grid grid-cols-3 gap-2">
-              {DEFAULT_PLATES.map((plate, i) => (
-                <div 
-                  key={plate.id}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all duration-500",
-                    i === currentPlateIdx ? "bg-chorus-primary shadow-[0_0_8px_rgba(0,245,212,0.6)]" : "bg-white/10"
-                  )}
-                />
-              ))}
-            </div>
-          </div>
-
-          <GlassHUD title="Core Invariants" delay={0.5} className="flex-1 border-white/10 overflow-hidden">
-            <div className="space-y-4 pt-2">
-               {[
-                 { label: RESONANCE_MAP.mirror.label, status: "SYNCED", icon: Shield, color: RESONANCE_MAP.mirror.color },
-                 { label: RESONANCE_MAP.triad.label, status: "STABLE", icon: Activity, color: RESONANCE_MAP.triad.color },
-                 { label: RESONANCE_MAP.envelope.label, status: "LOCKED", icon: Zap, color: RESONANCE_MAP.envelope.color }
-               ].map((inv, i) => (
-                 <div key={i} className="flex items-center gap-3">
-                   <div className="p-1.5 border rounded" style={{ borderColor: `${inv.color}33`, backgroundColor: `${inv.color}11` }}>
-                     <inv.icon className="w-3 h-3" style={{ color: inv.color }} />
-                   </div>
-                   <div className="flex-1">
-                     <div className="text-[10px] font-mono text-white/40 uppercase">{inv.label}</div>
-                     <div className="text-[10px] font-bold tracking-widest" style={{ color: inv.color }}>{inv.status}</div>
-                   </div>
-                 </div>
-               ))}
-               <div className="pt-4 mt-4 border-t border-white/5">
-                  <div className="text-[8px] font-mono text-white/20 uppercase tracking-widest mb-2">Telemetry Edge</div>
-                  <div className="flex gap-1">
-                     {HARMONIC_LADDER.map((h, i) => (
-                       <div key={i} className="h-1 flex-1 rounded-full" style={{ backgroundColor: h.color, opacity: 0.3 }} />
-                     ))}
-                  </div>
-               </div>
-            </div>
-          </GlassHUD>
-
-          <div className="flex-grow"></div>
-          <div className="text-[10px] text-center text-white/20 uppercase tracking-[0.4em] mb-4">Chorus V.4.0.0-Beta</div>
-        </div>
-      </main>
-
-      {/* Centered Command Rail */}
-      <div className="relative z-20 pb-12 flex justify-center w-full px-4">
-        <CommandInput onCommand={handleManualCommand} />
+        {/* Burn-in Metadata Overlay (Only visible during capture / state toggle) */}
+        <AnimatePresence>
+          {showMetadata && (
+            <Suspense fallback={null}>
+              <MetadataOverlay effectiveParams={effectiveParams} />
+            </Suspense>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Bottom Micro-Bar */}
-      <div className="relative z-10 bg-black/40 backdrop-blur-xl border-t border-white/5 px-8 py-3 flex justify-between text-[9px] uppercase tracking-[0.4em] text-white/40 font-mono">
-        <div className="flex space-x-12">
-          <span className="flex items-center gap-2">
-            <span className="w-1 h-1 bg-chorus-primary rounded-full" />
-            Authority: ARCHITECT (MFCS_TLC_VERIFIED)
-          </span>
-          <span className="hidden sm:inline">V2→V8_ARC: CLOSED</span>
+      {/* 3. LOWER RAIL: Stats & Harmoncs */}
+      <footer className="relative min-h-[180px] bg-black/60 border-t border-white/5 backdrop-blur-2xl z-20 flex flex-col p-6">
+        <div className="flex-1 flex gap-8">
+          {/* Harmonic Breakdown - Deferred via Suspense */}
+          <Suspense fallback={<div className="flex-1 bg-white/5 animate-pulse rounded" />}>
+            <HarmonicBreakdown frequency={effectiveParams.frequency} />
+          </Suspense>
+
+          {/* Node detail / current plate */}
+          <div className="w-80 flex gap-4">
+             <div className="flex-1 bg-white/5 border border-chorus-primary/20 p-3 rounded-lg flex flex-col justify-between">
+                <header className="flex justify-between items-center">
+                   <div className="text-[9px] font-mono text-chorus-primary uppercase tracking-widest flex items-center gap-1">
+                      <Box className="w-3 h-3" /> Active_Plate
+                   </div>
+                   <div className="w-2 h-2 rounded-full bg-chorus-primary animate-pulse" />
+                </header>
+                <div className="flex-1 flex flex-col justify-center py-2">
+                   <div className="text-xs font-bold tracking-[0.2em] uppercase">{activePlate.name}</div>
+                   <div className="text-[9px] text-white/30 mt-1 italic">{activePlate.role}</div>
+                </div>
+                <div className="text-[8px] font-mono text-white/20 uppercase tracking-[0.3em]">
+                   Mode: {activePlate.stateType} // → {DEFAULT_TRANSITIONS[activePlate.id] === INFINITY_CORE ? "∞" : DEFAULT_TRANSITIONS[activePlate.id]}
+                </div>
+             </div>
+          </div>
         </div>
-        <div className="flex space-x-8">
-          <span className="text-chorus-primary glow-text italic">SABR_ENGINE: OMEGA_STABLE</span>
-          <span className="hidden sm:inline">167.89 Hz // DAN-Ω</span>
+
+        {/* Command Interface */}
+        <div className="mt-6 flex items-center justify-center relative">
+          <CommandInput onCommand={handleCommand} />
+          <div className="absolute right-0 flex items-center gap-4 text-[10px] font-mono text-white/20 uppercase tracking-[0.4em]">
+            <span>167.89 Hz // Stable</span>
+            <span>V.8.4_DAS</span>
+          </div>
         </div>
-      </div>
+      </footer>
     </main>
   );
 }

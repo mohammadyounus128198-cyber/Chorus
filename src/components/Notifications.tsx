@@ -40,7 +40,7 @@ export function Notifications() {
   }, []);
 
   return (
-    <div className="fixed bottom-16 right-8 z-50 flex flex-col-reverse gap-2 w-64 pointer-events-none">
+    <div className="fixed bottom-[200px] right-[340px] z-50 flex flex-col-reverse gap-2 w-64 pointer-events-none">
       <AnimatePresence>
         {logs.map((log) => (
           <motion.div
