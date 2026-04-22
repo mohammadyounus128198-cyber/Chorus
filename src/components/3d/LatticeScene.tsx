@@ -31,7 +31,7 @@ export function LatticeScene({ hue, speed, complexity, frequency }: LatticeScene
         <pointLight position={[-10, 5, -5]} intensity={1} color="#0088ff" />
         
         <LatticeNodes hue={hue} speed={speed} complexity={complexity} frequency={frequency} />
-        <Monolith />
+        <Monolith hue={hue} speed={speed} frequency={frequency} />
         
         <EffectComposer>
           <Bloom 

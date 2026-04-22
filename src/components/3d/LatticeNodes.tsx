@@ -1,98 +1,106 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { HARMONIC_LADDER, RESONANCE_MAP } from "../../lib/resonance-map";
 
 interface LatticeNodesProps {
-  hue?: number; // 0-360
+  hue?: number; // 0-360 (base shift)
   speed?: number; // 0.1 - 5.0
   complexity?: number; // 0.1 - 2.0
   frequency?: number; // 0-1
 }
 
 export function LatticeNodes({ hue = 170, speed = 1.0, complexity = 1.0, frequency = 0.5 }: LatticeNodesProps) {
-  const count = Math.floor(1000 * complexity);
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const lineRef = useRef<THREE.LineSegments>(null);
-
-  const primaryColor = useMemo(() => {
-    return new THREE.Color(`hsl(${hue}, 100%, 50%)`);
-  }, [hue]);
-
-  const particles = useMemo(() => {
+  
+  // Create nodes distributed across harmonic shells
+  const nodes = useMemo(() => {
     const temp = [];
-    for (let i = 0; i < 2000; i++) { // Over-allocate for complexity changes
-      const x = (Math.random() - 0.5) * 40;
-      const y = (Math.random() - 0.5) * 40;
-      const z = (Math.random() - 0.5) * 40;
-      temp.push({ x, y, z, velocity: new THREE.Vector3().randomDirection().multiplyScalar(0.01) });
-    }
-    return temp;
-  }, []);
+    const pointsPerShell = 50; 
 
-  const lineGeometry = useMemo(() => {
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(2000 * 6); 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    return geometry;
-  }, []);
+    HARMONIC_LADDER.forEach((shell, shellIdx) => {
+      const radius = shell.radius * 5; // Scale radius for visibility
+      const count = Math.floor(pointsPerShell * complexity);
+      
+      for (let i = 0; i < count; i++) {
+        const phi = Math.acos(-1 + (2 * i) / count);
+        const theta = Math.sqrt(count * Math.PI) * phi;
+        
+        const x = radius * Math.sin(phi) * Math.cos(theta);
+        const y = radius * Math.sin(phi) * Math.sin(theta);
+        const z = radius * Math.cos(phi);
+        
+        temp.push({ 
+          x, y, z, 
+          originRadius: radius,
+          phi,
+          theta,
+          hz: shell.hz,
+          color: new THREE.Color(shell.color),
+          shellIdx
+        });
+      }
+    });
+
+    // Add Core Node specifically
+    temp.push({
+      x: 0, y: 0, z: 0,
+      originRadius: 0,
+      phi: 0, theta: 0,
+      hz: RESONANCE_MAP.core.hz,
+      color: new THREE.Color(RESONANCE_MAP.core.color),
+      shellIdx: -1
+    });
+
+    return temp;
+  }, [complexity]);
 
   useFrame((state) => {
     if (!meshRef.current) return;
 
     const dummy = new THREE.Object3D();
     const time = state.clock.elapsedTime * speed;
-    const peakFreq = frequency * 2;
+    
+    nodes.forEach((n, i) => {
+      // Oscillation speed tied to real frequency (scaled down for stability)
+      const freqScalar = (n.hz / 167.89) * frequency;
+      const pulse = Math.sin(time * freqScalar + i) * 0.2;
+      
+      // Floating motion on the shell
+      const r = n.originRadius + pulse;
+      const x = r * Math.sin(n.phi + time * 0.1) * Math.cos(n.theta + time * 0.05);
+      const y = r * Math.sin(n.phi + time * 0.1) * Math.sin(n.theta + time * 0.05);
+      const z = r * Math.cos(n.phi + time * 0.1);
 
-    const positions = lineRef.current?.geometry.attributes.position.array as Float32Array;
-    let lineIdx = 0;
-
-    for (let i = 0; i < count; i++) {
-        const p = particles[i];
-      // Movement driven by speed and frequency
-      const noise = Math.sin(time + i * 0.1) * 0.005 * peakFreq;
-      p.x += noise;
-      p.y += Math.cos(time + i * 0.5) * 0.002 * speed;
-      p.z += Math.sin(time * 0.5 + i) * 0.002 * speed;
-
-      dummy.position.set(p.x, p.y, p.z);
-      dummy.scale.setScalar(0.04 + (frequency * 0.04));
+      dummy.position.set(x, y, z);
+      const scale = 0.05 + (pulse * 0.1); 
+      dummy.scale.setScalar(Math.max(0.01, scale));
+      
+      // Rotate node based on identity
+      dummy.rotation.x = time * 0.2;
+      dummy.rotation.y = time * 0.3;
+      
       dummy.updateMatrix();
       meshRef.current!.setMatrixAt(i, dummy.matrix);
-
-      // Connections based on complexity
-      const connectionLimit = Math.floor(50 * complexity);
-      if (i < connectionLimit) {
-        const next = particles[(i + 1) % count];
-        positions[lineIdx++] = p.x;
-        positions[lineIdx++] = p.y;
-        positions[lineIdx++] = p.z;
-        positions[lineIdx++] = next.x;
-        positions[lineIdx++] = next.y;
-        positions[lineIdx++] = next.z;
-      }
-    }
-    
-    // Clear rest of buffer
-    while(lineIdx < 2000 * 6) {
-        positions[lineIdx++] = 0;
-    }
+      meshRef.current!.setColorAt(i, n.color);
+    });
 
     meshRef.current.instanceMatrix.needsUpdate = true;
-    if (lineRef.current) {
-        lineRef.current.geometry.attributes.position.needsUpdate = true;
-    }
+    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
   });
 
   return (
     <group>
-      <instancedMesh ref={meshRef} args={[undefined, undefined, 2000]}>
-        <sphereGeometry args={[1, 8, 8]} />
-        <meshBasicMaterial color={primaryColor} transparent opacity={0.6 * (0.5 + frequency)} />
+      <instancedMesh ref={meshRef} args={[undefined, undefined, nodes.length]}>
+        <boxGeometry args={[1, 1, 1]} /> 
+        <meshStandardMaterial 
+          emissiveIntensity={2} 
+          transparent 
+          opacity={0.8}
+          metalness={1}
+          roughness={0}
+        />
       </instancedMesh>
-      <lineSegments ref={lineRef}>
-        <primitive object={lineGeometry} attach="geometry" />
-        <lineBasicMaterial color={primaryColor} transparent opacity={0.15 * (0.5 + frequency)} />
-      </lineSegments>
     </group>
   );
 }

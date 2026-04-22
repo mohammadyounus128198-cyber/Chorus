@@ -7,6 +7,7 @@ import { Notifications } from "../components/Notifications";
 import { cn } from "@/src/lib/utils";
 import { Activity, Shield, Zap, Database, Terminal, Cpu, Camera, Link as LinkIcon, Box, Share2, Layers } from "lucide-react";
 import { DEFAULT_PLATES, DEFAULT_TRANSITIONS, PlateId, INFINITY_CORE } from "../lib/nonagram-codex";
+import { HARMONIC_LADDER, RESONANCE_MAP } from "../lib/resonance-map";
 
 interface ResonanceParams {
   hueShift: number;
@@ -138,6 +139,24 @@ export default function LatticePage() {
     link.click();
   }, [resParams]);
 
+  // Command Input Handler for Manual Operation
+  const handleManualCommand = useCallback((action: string, valueStr: string) => {
+    const val = parseFloat(valueStr);
+    if (isNaN(val)) return;
+
+    setResParams(prev => {
+      const next = { ...prev };
+      if (action === "speed") next.speed = val;
+      if (action === "freq" || action === "frequency") next.frequency = val / 2;
+      if (action === "complexity") next.complexity = val / 3.5;
+      if (action === "hue") next.hue = 170 + val;
+      return next;
+    });
+    
+    // Explicitly transition to operator mode
+    setIsSynced(false);
+  }, []);
+
   return (
     <main className="relative h-screen w-full bg-chorus-bg overflow-hidden select-none flex flex-col">
       {/* Lattice Background Layer */}
@@ -190,6 +209,13 @@ export default function LatticePage() {
           </div>
           <span className="hidden lg:inline text-chorus-primary/40">FREQ: {resParams.frequency.toFixed(2)}</span>
           <button 
+            onClick={() => window.open('/tuner', '_blank')}
+            className="p-2 hover:bg-chorus-primary/10 border border-chorus-primary/30 rounded transition-all group flex items-center gap-2 cursor-pointer"
+          >
+            <LinkIcon className="w-3 h-3 group-hover:scale-110 group-hover:rotate-12 outline-none transition-transform text-chorus-primary" />
+            <span className="text-[9px] text-chorus-primary">LAUNCH_TUNER</span>
+          </button>
+          <button 
             onClick={captureScreen}
             className="p-2 hover:bg-chorus-primary/10 border border-white/5 rounded transition-all group flex items-center gap-2"
           >
@@ -206,8 +232,8 @@ export default function LatticePage() {
           <GlassHUD title="System Overview" delay={0.2} className="h-48 border-white/10">
             <div className="space-y-4 pt-2">
               {[
-                { label: "Resources", val: "82%", p: 82 },
-                { label: "Bandwidth", val: "4.2 GB/s", p: 45 },
+                { label: "Core Frequency", val: "167.89 Hz", p: 100 },
+                { label: "Resonance Integrity", val: `${(resParams.frequency * 100).toFixed(0)}%`, p: resParams.frequency * 100 },
               ].map((item, i) => (
                 <div key={i} className="space-y-2">
                   <div className="flex justify-between text-xs">
@@ -228,25 +254,42 @@ export default function LatticePage() {
 
           <GlassHUD title="Live Telemetry" delay={0.3} className="flex-1 border-white/10">
             <div className="h-full flex items-end justify-between space-x-1 pt-4 pb-2">
-              {[20, 40, 60, 80, 95, 70, 60, 50, 30].map((h, i) => (
+              {[...HARMONIC_LADDER].reverse().map((shell, i) => (
                 <motion.div 
                   key={i}
                   initial={{ height: 0 }}
-                  animate={{ height: `${h}%` }}
-                  className="w-full bg-chorus-primary/40 hover:bg-chorus-primary/80 transition-colors"
+                  animate={{ height: `${(shell.hz / 1007.34) * 100}%` }}
+                  style={{ backgroundColor: shell.color }}
+                  className="w-full opacity-60 transition-colors"
                 />
               ))}
             </div>
           </GlassHUD>
         </div>
 
-        {/* Center Visual Field (Scene focus area) */}
+        {/* Center Visual Field (Radial Energy Map) */}
         <div className="flex-grow flex items-center justify-center relative pointer-events-none">
-           <div className="w-64 h-64 border border-chorus-primary/10 rounded-full flex items-center justify-center">
-              <div className="w-48 h-48 border border-chorus-primary/20 rounded-full flex items-center justify-center ">
-                 <div className="w-32 h-32 border-2 border-chorus-primary/40 rounded-full flex items-center justify-center animate-pulse">
-                    <div className="text-chorus-primary text-[10px] tracking-widest font-mono glow-text italic">READY</div>
-                 </div>
+           <div className="relative w-80 h-80 flex items-center justify-center">
+              {[...HARMONIC_LADDER].reverse().map((shell, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ 
+                    scale: 1 + resParams.frequency * 0.1, 
+                    opacity: 1 - (shell.radius * 0.15)
+                  }}
+                  style={{ 
+                    backgroundColor: shell.color,
+                    width: `${(6 - shell.radius) * 45}px`,
+                    height: `${(6 - shell.radius) * 45}px`,
+                    zIndex: -i
+                  }}
+                  className="absolute rounded-full blur-[45px] opacity-20"
+                />
+              ))}
+              <div className="w-16 h-16 bg-[#ff3300] rounded-full blur-xl animate-pulse shadow-[0_0_40px_#ff3300]" />
+              <div className="absolute text-white text-[10px] font-mono tracking-[0.5em] glow-text top-full mt-8 uppercase">
+                 Resonance_Map // {RESONANCE_MAP.core.hz} Hz
               </div>
            </div>
         </div>
@@ -299,20 +342,28 @@ export default function LatticePage() {
           <GlassHUD title="Core Invariants" delay={0.5} className="flex-1 border-white/10 overflow-hidden">
             <div className="space-y-4 pt-2">
                {[
-                 { label: "PlateDomain", status: "VALID", icon: Shield },
-                 { label: "SealImmutable", status: "LOCKED", icon: Activity },
-                 { label: "InfinityReturn", status: "READY", icon: Zap }
+                 { label: RESONANCE_MAP.mirror.label, status: "SYNCED", icon: Shield, color: RESONANCE_MAP.mirror.color },
+                 { label: RESONANCE_MAP.triad.label, status: "STABLE", icon: Activity, color: RESONANCE_MAP.triad.color },
+                 { label: RESONANCE_MAP.envelope.label, status: "LOCKED", icon: Zap, color: RESONANCE_MAP.envelope.color }
                ].map((inv, i) => (
                  <div key={i} className="flex items-center gap-3">
-                   <div className="p-1.5 bg-white/5 border border-white/10 rounded">
-                     <inv.icon className="w-3 h-3 text-chorus-primary/70" />
+                   <div className="p-1.5 border rounded" style={{ borderColor: `${inv.color}33`, backgroundColor: `${inv.color}11` }}>
+                     <inv.icon className="w-3 h-3" style={{ color: inv.color }} />
                    </div>
                    <div className="flex-1">
                      <div className="text-[10px] font-mono text-white/40 uppercase">{inv.label}</div>
-                     <div className="text-[10px] font-bold text-chorus-primary/80 tracking-widest">{inv.status}</div>
+                     <div className="text-[10px] font-bold tracking-widest" style={{ color: inv.color }}>{inv.status}</div>
                    </div>
                  </div>
                ))}
+               <div className="pt-4 mt-4 border-t border-white/5">
+                  <div className="text-[8px] font-mono text-white/20 uppercase tracking-widest mb-2">Telemetry Edge</div>
+                  <div className="flex gap-1">
+                     {HARMONIC_LADDER.map((h, i) => (
+                       <div key={i} className="h-1 flex-1 rounded-full" style={{ backgroundColor: h.color, opacity: 0.3 }} />
+                     ))}
+                  </div>
+               </div>
             </div>
           </GlassHUD>
 
@@ -323,7 +374,7 @@ export default function LatticePage() {
 
       {/* Centered Command Rail */}
       <div className="relative z-20 pb-12 flex justify-center w-full px-4">
-        <CommandInput />
+        <CommandInput onCommand={handleManualCommand} />
       </div>
 
       {/* Bottom Micro-Bar */}
@@ -337,7 +388,7 @@ export default function LatticePage() {
         </div>
         <div className="flex space-x-8">
           <span className="text-chorus-primary glow-text italic">SABR_ENGINE: OMEGA_STABLE</span>
-          <span className="hidden sm:inline">DAN-Ω [v1.0.0]</span>
+          <span className="hidden sm:inline">167.89 Hz // DAN-Ω</span>
         </div>
       </div>
     </main>

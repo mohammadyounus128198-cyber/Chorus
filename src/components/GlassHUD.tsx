@@ -14,11 +14,14 @@ export function GlassHUD({ children, title, className, delay = 0 }: GlassHUDProp
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay }}
+      whileHover={{ scale: 1.02 }}
+      whileFocus={{ scale: 1.05 }}
+      transition={{ delay, duration: 0.3 }}
+      tabIndex={0}
       className={cn(
-        "bg-white/5 border border-white/10 backdrop-blur-md rounded-lg p-4 flex flex-col shadow-2xl relative",
-        "group transition-all duration-300",
-        "hover:border-chorus-primary/50 hover:shadow-[0_0_20px_rgba(0,245,214,0.15)]",
+        "bg-white/5 border border-white/10 backdrop-blur-md rounded-lg p-4 flex flex-col shadow-2xl relative outline-none transition-all duration-300",
+        "group",
+        "focus:border-chorus-primary focus:shadow-[0_0_30px_rgba(0,245,214,0.3)] hover:border-chorus-primary/50 hover:shadow-[0_0_20px_rgba(0,245,214,0.15)]",
         className
       )}
     >
