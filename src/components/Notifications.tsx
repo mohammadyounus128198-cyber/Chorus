@@ -33,27 +33,27 @@ export function Notifications() {
         type: Math.random() > 0.1 ? 'info' : 'success',
         timestamp: new Date().toLocaleTimeString()
       };
-      setLogs(prev => [newLog, ...prev].slice(0, 5));
+      setLogs(prev => [newLog, ...prev].slice(0, 3));
     }, 4000);
 
     return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="fixed top-8 right-8 z-50 flex flex-col gap-2 w-64 pointer-events-none">
+    <div className="fixed bottom-16 right-8 z-50 flex flex-col-reverse gap-2 w-64 pointer-events-none">
       <AnimatePresence>
         {logs.map((log) => (
           <motion.div
             key={log.id}
-            initial={{ opacity: 0, x: 50, scale: 0.9 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 20, scale: 0.9 }}
-            className="glass-panel p-2 flex items-center gap-2 border-l-2 border-l-chorus-primary"
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="bg-black/40 backdrop-blur-md border border-white/10 p-2 flex items-center gap-2 border-l-2 border-l-chorus-primary/50"
           >
-            {log.type === 'info' ? <Info className="w-3 h-3 text-chorus-primary" /> : <CheckCircle className="w-3 h-3 text-chorus-primary" />}
+            {log.type === 'info' ? <Info className="w-3 h-3 text-chorus-primary/70" /> : <CheckCircle className="w-3 h-3 text-chorus-primary/70" />}
             <div className="flex-1">
-              <div className="text-[8px] font-mono text-chorus-primary/50 tracking-tighter">{log.timestamp}</div>
-              <div className="text-[10px] font-mono text-white tracking-widest">{log.message}</div>
+              <div className="text-[7px] font-mono text-chorus-primary/40 tracking-tighter">{log.timestamp}</div>
+              <div className="text-[9px] font-mono text-white/80 tracking-widest">{log.message}</div>
             </div>
           </motion.div>
         ))}

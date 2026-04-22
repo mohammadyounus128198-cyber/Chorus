@@ -86,9 +86,9 @@ export function Monolith({ hue = 170, speed = 1.0, frequency = 1.0 }: MonolithPr
 
   const positions = useMemo(() => {
     return [
-      [-5, -2, -5],
-      [5, -2, -8],
-      [0, -2, -12]
+      [-15, -4, -10],
+      [15, -4, -15],
+      [0, -4, -25]
     ];
   }, []);
 
