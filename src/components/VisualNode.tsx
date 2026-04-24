@@ -8,6 +8,7 @@ export function VisualNode({ v, ctx }: { v: VisualState, ctx: any }) {
 
   return (
     <div
+      className="pointer-events-none"
       style={{
         width: 120 + v.radius * 20,
         height: 120 + v.radius * 20,
