@@ -5,20 +5,79 @@ import { fileURLToPath } from "url";
 import { kernel } from "./src/lib/chorus-stack/control-kernel";
 import { assignmentEngine } from "./src/lib/chorus-stack/assignment-engine";
 import { rttsEngine } from "./src/lib/chorus-stack/rtts-evidence";
+import { webcrypto } from "node:crypto";
+import { canonicalize } from "./src/lib/chorus-stack/canonical";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Server-side Trusted Key Pair
+let serverPrivateKey: webcrypto.CryptoKey;
+let serverPublicKeyString: string;
+
+async function initServerCrypto() {
+  const { subtle } = webcrypto;
+  const keyPair = await subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"]
+  );
+  serverPrivateKey = keyPair.privateKey;
+  
+  const exported = await subtle.exportKey("spki", keyPair.publicKey);
+  const exportedArray = Array.from(new Uint8Array(exported));
+  serverPublicKeyString = Buffer.from(exportedArray).toString('base64');
+  
+  console.log("Trusted Server Authority Key generated.");
+}
+
 async function startServer() {
+  await initServerCrypto();
+  
   const app = express();
   const PORT = 3000;
+  
+  app.use(express.json());
 
   // Placeholder for API routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "active", version: "sentinel-2.1" });
   });
 
+  // Proof Authority Endpoint
+  app.post("/api/sign-proof", async (req, res) => {
+    try {
+      const { subtle } = webcrypto;
+      const data = req.body;
+      const canonical = canonicalize(data);
+      
+      const msgBuffer = new TextEncoder().encode(canonical);
+      const hashBuffer = await subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      const signatureBuffer = await subtle.sign(
+        { name: "ECDSA", hash: { name: "SHA-256" } },
+        serverPrivateKey,
+        msgBuffer
+      );
+      
+      const signatureArray = Array.from(new Uint8Array(signatureBuffer));
+      const signatureBase64 = Buffer.from(signatureArray).toString('base64');
+      
+      res.json({
+        hash,
+        signature: signatureBase64,
+        publicKey: serverPublicKeyString
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to sign proof" });
+    }
+  });
+
   // Chorus Stack Simulation Endpoints
+
   app.get("/api/chorus/kernel", (req, res) => {
     const { stress = "0", contamination = "0" } = req.query;
     const mode = kernel.evaluate(parseFloat(stress as string), parseFloat(contamination as string));

@@ -1,6 +1,5 @@
 import { toCents, compoundCents, assertInvariant } from "./money";
-import { sha256, signPayload, exportPublicKey } from "./crypto";
-import { canonicalize, CanonicalPayload } from "./canonical";
+import { CanonicalPayload } from "./canonical";
 import { SystemState, SystemContext } from "./system-state";
 
 export type ProofData = {
@@ -18,8 +17,7 @@ export type ProofData = {
 };
 
 export async function calculateBound(
-  input: { principal: number; rate: number; years: number },
-  keyPair: CryptoKeyPair
+  input: { principal: number; rate: number; years: number }
 ): Promise<ProofData> {
   const p = toCents(input.principal);
   const f = compoundCents(p, input.rate, input.years);
@@ -35,10 +33,19 @@ export async function calculateBound(
     gain: g / 100
   };
   
-  const canonical = canonicalize(payload);
-  const hash = await sha256(canonical);
-  const signature = await signPayload(canonical, keyPair.privateKey);
-  const pubKeyString = await exportPublicKey(keyPair.publicKey);
+  const res = await fetch("/api/sign-proof", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  
+  if (!res.ok) {
+    throw new Error("Failed to sign payload via server authority");
+  }
+  
+  const { hash, signature, publicKey } = await res.json();
 
   return Object.freeze({
     timestamp: new Date().toISOString(),
@@ -53,7 +60,7 @@ export async function calculateBound(
     verification: {
       hash,
       signature,
-      publicKey: pubKeyString
+      publicKey
     }
   });
 }

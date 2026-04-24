@@ -42,11 +42,8 @@ export async function verifySignature(message: string, signatureBase64: string, 
         const enc = new TextEncoder();
         
         // Import public key
-        const binaryDerString = window.atob(publicKeyBase64);
-        const binaryDer = new Uint8Array(binaryDerString.length);
-        for (let i = 0; i < binaryDerString.length; i++) {
-        binaryDer[i] = binaryDerString.charCodeAt(i);
-        }
+        const binaryDerString = atob(publicKeyBase64);
+        const binaryDer = Uint8Array.from(binaryDerString, c => c.charCodeAt(0));
         
         const publicKey = await crypto.subtle.importKey(
             "spki",
@@ -57,11 +54,8 @@ export async function verifySignature(message: string, signatureBase64: string, 
         );
 
         // Decode signature
-        const binarySigString = window.atob(signatureBase64);
-        const binarySig = new Uint8Array(binarySigString.length);
-        for (let i = 0; i < binarySigString.length; i++) {
-            binarySig[i] = binarySigString.charCodeAt(i);
-        }
+        const binarySigString = atob(signatureBase64);
+        const binarySig = Uint8Array.from(binarySigString, c => c.charCodeAt(0));
 
         return await crypto.subtle.verify(
             {
@@ -73,6 +67,7 @@ export async function verifySignature(message: string, signatureBase64: string, 
             enc.encode(message)
         );
     } catch (e) {
+        console.error("Signature verification failed:", e);
         return false;
     }
 }

@@ -3,21 +3,14 @@ import { SystemState, SystemContext, mapToVisual } from "../lib/chorus-stack/sys
 import { VisualNode } from "../components/VisualNode";
 import { VerifyOverlay } from "../components/VerifyOverlay";
 import { ExportProofBtn } from "../components/ExportProofBtn";
-import { generateKeyPair } from "../lib/chorus-stack/crypto";
 import { calculateBound, ProofData } from "../lib/chorus-stack/proof";
 
 export default function LatticePage() {
   const [isErrorMode, setIsErrorMode] = useState(false);
-  const [keyPair, setKeyPair] = useState<CryptoKeyPair | null>(null);
   const [proof, setProof] = useState<ProofData | null>(null);
 
-  useEffect(() => {
-    generateKeyPair().then(setKeyPair);
-  }, []);
-
   const handleCalculate = async () => {
-    if (!keyPair) return;
-    const p = await calculateBound({ principal: 167.89, rate: 0.05, years: 10 }, keyPair);
+    const p = await calculateBound({ principal: 167.89, rate: 0.05, years: 10 });
     setProof(p);
     setIsErrorMode(false);
   };
@@ -57,7 +50,6 @@ export default function LatticePage() {
           <div className="flex gap-2 mt-4">
             <button 
               onClick={handleCalculate} 
-              disabled={!keyPair}
               className="pointer-events-auto px-3 py-1 bg-teal-500/10 border border-teal-500/30 hover:bg-teal-500/20 text-teal-400 transition-colors disabled:opacity-50"
             >
               Calculate & Bind Data
