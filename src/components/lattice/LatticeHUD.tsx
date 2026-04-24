@@ -26,28 +26,6 @@ export function LatticeHUD() {
           </div>
         </motion.div>
       </div>
-
-      {/* Center Detail Card */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.5 }}
-          className="bg-sky-950/20 backdrop-blur-2xl border border-sky-400/40 p-10 rounded-3xl w-80 shadow-[0_0_50px_rgba(0,163,255,0.1)] flex flex-col gap-6"
-        >
-          <div className="flex flex-col gap-1 border-b border-sky-400/20 pb-4">
-            <div className="text-[8px] text-sky-400/60 uppercase tracking-[0.5em]">Core</div>
-            <div className="text-xl font-bold text-white tracking-widest">core-1</div>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <DetailRow label="Hz" value={CORE_HZ.toFixed(2)} />
-            <DetailRow label="Amp" value="1.00" />
-            <DetailRow label="Coherence" value="1.00" />
-            <DetailRow label="State" value="Active" valueColor="text-emerald-400" />
-          </div>
-        </motion.div>
-      </div>
     </div>
   );
 }

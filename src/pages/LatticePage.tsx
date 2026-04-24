@@ -209,18 +209,6 @@ export default function LatticePage() {
 
         <LatticeHUD />
 
-        <Notifications />
-
-        {/* Telemetry Rail (Right) - Deferred via Suspense */}
-        <Suspense fallback={null}>
-          <TelemetryRail 
-            effectiveParams={effectiveParams}
-            localParams={localParams}
-            setLocalParams={setLocalParams}
-            resetToLive={resetToLive}
-          />
-        </Suspense>
-
         {/* Burn-in Metadata Overlay (Only visible during capture / state toggle) */}
         <AnimatePresence>
           {showMetadata && (
@@ -232,37 +220,11 @@ export default function LatticePage() {
       </div>
 
       {/* 3. LOWER RAIL: Stats & Harmoncs */}
-      <footer className="relative min-h-[180px] bg-black/60 border-t border-white/5 backdrop-blur-2xl z-20 flex flex-col p-6">
-        <div className="flex-1 flex gap-8">
-          {/* Harmonic Breakdown - Deferred via Suspense */}
-          <Suspense fallback={<div className="flex-1 bg-white/5 animate-pulse rounded" />}>
-            <HarmonicBreakdown frequency={effectiveParams.frequency} />
-          </Suspense>
-
-          {/* Node detail / current plate */}
-          <div className="w-80 flex gap-4">
-             <div className="flex-1 bg-white/5 border border-chorus-primary/20 p-3 rounded-lg flex flex-col justify-between">
-                <header className="flex justify-between items-center">
-                   <div className="text-[9px] font-mono text-chorus-primary uppercase tracking-widest flex items-center gap-1">
-                      <Box className="w-3 h-3" /> Active_Plate
-                   </div>
-                   <div className="w-2 h-2 rounded-full bg-chorus-primary animate-pulse" />
-                </header>
-                <div className="flex-1 flex flex-col justify-center py-2">
-                   <div className="text-xs font-bold tracking-[0.2em] uppercase">{activePlate.name}</div>
-                   <div className="text-[9px] text-white/30 mt-1 italic">{activePlate.role}</div>
-                </div>
-                <div className="text-[8px] font-mono text-white/20 uppercase tracking-[0.3em]">
-                   Mode: {activePlate.stateType} // → {DEFAULT_TRANSITIONS[activePlate.id] === INFINITY_CORE ? "∞" : DEFAULT_TRANSITIONS[activePlate.id]}
-                </div>
-             </div>
-          </div>
-        </div>
-
+      <footer className="relative min-h-[80px] bg-black/60 border-t border-white/5 backdrop-blur-2xl z-20 flex flex-col p-4 justify-center">
         {/* Command Interface */}
-        <div className="mt-6 flex items-center justify-center relative">
+        <div className="flex items-center justify-center relative">
           <CommandInput onCommand={handleCommand} />
-          <div className="absolute right-0 flex items-center gap-4 text-[10px] font-mono text-white/20 uppercase tracking-[0.4em]">
+          <div className="absolute right-0 hidden md:flex items-center gap-4 text-[10px] font-mono text-white/20 uppercase tracking-[0.4em]">
             <span>167.89 Hz // Stable</span>
             <span>V.8.4_DAS</span>
           </div>

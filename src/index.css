@@ -12,6 +12,16 @@
   --color-chorus-surface: rgba(255, 255, 255, 0.05);
   --color-chorus-glass: rgba(255, 255, 255, 0.05);
   --color-chorus-glass-border: rgba(255, 255, 255, 0.1);
+
+  /* Explicit Hex for html2canvas compatibility */
+  --color-sky-950: #082f49;
+  --color-sky-500: #0ea5e9;
+  --color-sky-400: #38bdf8;
+  --color-sky-300: #7dd3fc;
+  --color-emerald-500: #10b981;
+  --color-emerald-400: #34d399;
+  --color-amber-500: #f59e0b;
+  --color-amber-400: #fbbf24;
 }
 
 @layer base {
