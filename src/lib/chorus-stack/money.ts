@@ -3,11 +3,7 @@ export function toCents(dollars: number): number {
 }
 
 export function compoundCents(principalCents: number, rate: number, years: number): number {
-  let current = principalCents;
-  for (let i = 0; i < years; i++) {
-    current = Math.round(current * (1 + rate));
-  }
-  return current;
+  return Math.round(principalCents * Math.pow(1 + rate, years));
 }
 
 export function assertInvariant(principalCents: number, finalCents: number, gainCents: number) {

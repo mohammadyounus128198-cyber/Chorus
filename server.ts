@@ -15,20 +15,35 @@ const __dirname = path.dirname(__filename);
 let serverPrivateKey: webcrypto.CryptoKey;
 let serverPublicKeyString: string;
 
+// Oracle Authority Key (Hardcoded for Omega-Directive Consistency)
+const MASTER_PRIV_PKCS8 = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgfXm8Z6q6X6vP9Ym8P8p8u8w7e8r6q6w8p6lB9n1V6y+hRANCAAE7p6lB9n1V6y/yS8Z6q6X6vP9Ym8P8p8u8w7e8r6q6w8p6lB9n1V6y/yS8Z6q6X6vP9Ym8P8p8u8w7e8r6q6w==";
+const MASTER_PUB_SPKI = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE7p6lB9n1V6y/yS8Z6q6X6vP9Ym8P8p8u8w7e8r6q6X6vP9Ym8P8p8u8w7e8r6q6w8p6lB9n1V6y/yS8Z6q6X6vP9Ym8P8p8u8w7e8r6q6w==";
+
 async function initServerCrypto() {
   const { subtle } = webcrypto;
-  const keyPair = await subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["sign", "verify"]
-  );
-  serverPrivateKey = keyPair.privateKey;
-  
-  const exported = await subtle.exportKey("spki", keyPair.publicKey);
-  const exportedArray = Array.from(new Uint8Array(exported));
-  serverPublicKeyString = Buffer.from(exportedArray).toString('base64');
-  
-  console.log("Trusted Server Authority Key generated.");
+  try {
+    // Import stable key for deterministic demo environment
+    const privBuffer = Buffer.from(MASTER_PRIV_PKCS8, 'base64');
+    serverPrivateKey = await subtle.importKey(
+      "pkcs8",
+      privBuffer,
+      { name: "ECDSA", namedCurve: "P-256" },
+      true,
+      ["sign"]
+    );
+    serverPublicKeyString = MASTER_PUB_SPKI;
+    console.log("Ω-DIRECTIVE: Master Authority Key loaded (SEALED)");
+  } catch (e) {
+    console.warn("Authority Key load failed, falling back to ephemeral key.");
+    const keyPair = await subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      true,
+      ["sign", "verify"]
+    );
+    serverPrivateKey = keyPair.privateKey;
+    const exported = await subtle.exportKey("spki", keyPair.publicKey);
+    serverPublicKeyString = Buffer.from(new Uint8Array(exported)).toString('base64');
+  }
 }
 
 async function startServer() {

@@ -3,7 +3,10 @@ import { SystemState, SystemContext, mapToVisual } from "../lib/chorus-stack/sys
 import { VisualNode } from "../components/VisualNode";
 import { VerifyOverlay } from "../components/VerifyOverlay";
 import { ExportProofBtn } from "../components/ExportProofBtn";
+import { AudioEmbed } from "../components/AudioEmbed";
+import { SymmetryVisualizer } from "../components/SymmetryVisualizer";
 import { calculateBound, ProofData } from "../lib/chorus-stack/proof";
+import { isTrustedIssuer, getAuthority } from "../lib/chorus-stack/trust";
 
 export default function LatticePage() {
   const [isErrorMode, setIsErrorMode] = useState(false);
@@ -16,13 +19,26 @@ export default function LatticePage() {
   };
 
   // Derive system truth (SABR-HOLD, Equilibrium)
+  const isTrusted = proof ? isTrustedIssuer(proof.verification.publicKey) : true;
   const systemState: SystemState = isErrorMode ? "ERROR" : (proof ? proof.system.state : "HOLD");
   const context: SystemContext = isErrorMode 
     ? { output: 0.3, drift: 4.5 } 
     : (proof ? proof.system.context : { output: 1.0, drift: 0.0 });
     
+  // Granular Verification Status
+  let verificationLevel: "VERIFIED" | "UNTRUSTED" | "COMPROMISED" = "VERIFIED";
+  if (isErrorMode) {
+    verificationLevel = "COMPROMISED";
+  } else if (proof !== null) {
+    if (!isTrusted) {
+      verificationLevel = "UNTRUSTED";
+    }
+  }
+
   const verification = { 
-    trustworthy: (!isErrorMode && proof !== null) || (!isErrorMode && proof === null) 
+    trustworthy: verificationLevel === "VERIFIED",
+    status: verificationLevel,
+    authorityName: proof ? getAuthority(proof.verification.publicKey)?.name : "Ω-SENTINEL-MASTER"
   };
   
   const visual = mapToVisual(systemState, context, verification);
@@ -35,6 +51,12 @@ export default function LatticePage() {
       className="relative h-screen w-full bg-black text-white overflow-hidden flex flex-col font-sans"
     >
       <VerifyOverlay v={visual} ctx={context} verification={verification} hash={proof?.verification.hash} />
+
+      {/* NEW: Carrier Visualizer */}
+      <div className="absolute top-8 right-8 z-50 pointer-events-none flex flex-col gap-6">
+        <AudioEmbed />
+        <SymmetryVisualizer />
+      </div>
 
       {/* VERIFIED RENDER STAGE */}
       <div className="absolute inset-0 z-0 flex items-center justify-center">
@@ -63,10 +85,13 @@ export default function LatticePage() {
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-3">
+        <div className="flex flex-col items-end gap-3 pointer-events-auto">
           <ExportProofBtn proof={proof} />
+          <a href="/verifier" className="px-5 h-[42px] inline-flex items-center justify-center gap-2 text-[11px] font-mono tracking-widest font-bold uppercase rounded border transition-colors bg-[#fb7185]/10 text-[#fb7185] border-[#fb7185]/30 hover:bg-[#fb7185]/20">
+            Open Verifier
+          </a>
           
-          <div className="text-[10px] font-mono tracking-widest text-teal-400/40 mt-2">
+          <div className="text-[10px] font-mono tracking-widest text-teal-400/40 mt-2 pointer-events-none">
             ⚜️ ⊳ يَا حَيُّ يَا قَيُّومُ 🕊 🔥 ● ♥ ☽ ✦ 🐇
           </div>
         </div>

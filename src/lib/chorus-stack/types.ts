@@ -31,3 +31,18 @@ export interface ModeState {
   since: number;
   reason?: string;
 }
+
+export interface Vote {
+  authorityId: string;
+  state: any;
+  signature: string;
+}
+
+export type ConsensusResult = {
+  winner: any | null;
+  votes: number;
+  total: number;
+  threshold: number;
+  isSymmetricTie: boolean;
+  winnerHash?: string;
+};

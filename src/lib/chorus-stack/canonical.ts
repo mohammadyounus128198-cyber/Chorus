@@ -6,13 +6,19 @@ export type CanonicalPayload = {
   gain: number;
 };
 
-export function canonicalize(data: CanonicalPayload): string {
-  // Deterministic JSON by explicitly ordering keys
-  return JSON.stringify({
-    principal: data.principal,
-    rate: data.rate,
-    years: data.years,
-    final: data.final,
-    gain: data.gain
-  });
+/**
+ * Deeply canonicalizes an object by sorting keys at every level.
+ */
+export function canonicalize(obj: any): string {
+  if (obj === null || typeof obj !== "object") {
+    return JSON.stringify(obj);
+  }
+
+  if (Array.isArray(obj)) {
+    return "[" + obj.map(canonicalize).join(",") + "]";
+  }
+
+  const keys = Object.keys(obj).sort();
+  const pairs = keys.map(key => `"${key}":${canonicalize(obj[key])}`);
+  return "{" + pairs.join(",") + "}";
 }
