@@ -299,6 +299,30 @@ export default function OracleDashboard() {
                   <span className="text-xs font-medium text-text-dim tracking-tight">{seal}</span>
                 </div>
               ))}
+
+              <button 
+                onClick={() => {
+                  const proof = {
+                    timestamp: new Date().toISOString(),
+                    votes: [
+                      { authorityId: "SENTINEL-MASTER", state: { consensus: "ALPHA", freq: 671.6 }, signature: "dW5pcXVlX3NpZ18x" },
+                      { authorityId: "SENTINEL-01", state: { consensus: "ALPHA", freq: 671.6 }, signature: "dW5pcXVlX3NpZ18y" },
+                      { authorityId: "PHANTOM-NODE", state: { consensus: "BETA", freq: 671.6 }, signature: "dW5pcXVlX3NpZ18z" },
+                      { authorityId: "GHOST-NODE-01", state: { consensus: "BETA", freq: 671.6 }, signature: "dW5pcXVlX3NpZ180" }
+                    ]
+                  };
+                  const blob = new Blob([JSON.stringify(proof, null, 2)], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "sabr-consensus-split.json";
+                  a.click();
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl border border-accent/30 bg-accent/10 text-accent text-xs font-bold hover:bg-accent/20 transition-all mt-4"
+              >
+                <GitBranch className="size-4" />
+                Artifact Test: Split Brain
+              </button>
             </div>
 
             <div className="mt-auto pt-6 border-t border-border/50">

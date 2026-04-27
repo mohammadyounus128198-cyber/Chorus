@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test src/lib/frequency-map.test.ts src/lib/chorus-stack/control-kernel.test.ts src/lib/chorus-stack/allocator.test.ts"
+    "test": "node --import tsx --test src/lib/frequency-map.test.ts src/lib/chorus-stack/control-kernel.test.ts src/lib/chorus-stack/allocator.test.ts src/lib/chorus-stack/consensus.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

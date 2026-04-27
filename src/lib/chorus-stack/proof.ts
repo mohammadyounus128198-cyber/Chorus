@@ -1,6 +1,7 @@
 import { toCents, compoundCents, assertInvariant } from "./money";
 import { CanonicalPayload } from "./canonical";
 import { SystemState, SystemContext } from "./system-state";
+import { Vote, ConsensusResult } from "./types";
 
 export type ProofData = {
   timestamp: string;
@@ -14,6 +15,12 @@ export type ProofData = {
     signature: string;
     publicKey: string;
   };
+};
+
+export type ConsensusProof = {
+  timestamp: string;
+  votes: Vote[];
+  consensus: ConsensusResult;
 };
 
 export async function calculateBound(

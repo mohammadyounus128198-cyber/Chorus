@@ -1,0 +1,10 @@
+{
+  "frequency_hz": 671.6,
+  "label": "steady_tone",
+  "category": "reference_signal",
+  "context": "audio analysis, synthesis, and resonance testing",
+  "sampling_standard": 44100,
+  "notes": "Used for deterministic tone generation and system calibration",
+  "hash": "5342b41a2fc9cb0723dc26084dbb321494cccbed304aed5e06386f33e26d2193",
+  "timestamp": "2026-04-26T00:00:00Z"
+}

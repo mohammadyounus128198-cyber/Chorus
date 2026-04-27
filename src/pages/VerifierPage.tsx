@@ -4,7 +4,8 @@ import { Upload, ShieldCheck, AlertTriangle, ShieldX, Activity, CheckCircle, Fil
 import { verifySignature, sha256 } from '../lib/chorus-stack/crypto';
 import { canonicalize } from '../lib/chorus-stack/canonical';
 import { isTrustedIssuer, isKeyExpired, classifyAuthority, getAuthority } from '../lib/chorus-stack/trust';
-import { ProofData } from '../lib/chorus-stack/proof';
+import { ProofData, ConsensusProof } from '../lib/chorus-stack/proof';
+import { consensusEngine } from '../lib/chorus-stack/consensus-engine';
 
 type VerifierState = "WAITING" | "PROCESSING" | "VERIFIED" | "TRANSFORMED" | "BROKEN" | "UNKNOWN" | "UNTRUSTED" | "EXPIRED" | "REVOKED" | "ROTATED" | "SYMMETRY_RESOLVED";
 
@@ -50,8 +51,14 @@ export default function VerifierPage() {
   const verifyJsonProof = async (file: File) => {
     addLog("Parsing JSON Proof Artifact...");
     const text = await file.text();
-    const proof: ProofData = JSON.parse(text);
+    const json = JSON.parse(text);
     
+    if (json.votes && Array.isArray(json.votes)) {
+      await verifyConsensusProof(json);
+      return;
+    }
+
+    const proof: ProofData = json;
     // 1. Canonicalization & Hash Check
     addLog("Running Deep Canonicalization (Deterministic Sort)...");
     const canonical = canonicalize(proof.data);
@@ -89,6 +96,53 @@ export default function VerifierPage() {
     else setState("VERIFIED");
 
     addLog("Audit complete.");
+  };
+
+  const verifyConsensusProof = async (proof: ConsensusProof) => {
+    addLog(`Ingesting Consensus Artifact (${proof.votes.length} votes)...`);
+    
+    // 1. Resolve Consensus via Engine
+    addLog("Executing Sabr AC-6 Consensus Resolution...");
+    const result = await consensusEngine.resolve(proof.votes);
+    
+    if (result.isSymmetricTie) {
+      addLog("WARNING: Majority Symmetry (Split-Brain) detected.");
+      addLog("ACTION: Applying Path A (Lexicographical Hash Minimum) hardening...");
+    }
+
+    if (result.winner) {
+      addLog(`Consensus ACHIEVED: Winner found with ${result.votes}/${result.total} votes.`);
+      addLog(`Deterministic Hash: ${result.winnerHash?.substring(0, 16)}...`);
+    } else {
+      addLog("Consensus FAILED: No state reached majority threshold.");
+    }
+
+    // 2. Individual Vote Verification
+    addLog("Staggering individual vote audits...");
+    let allSigsValid = true;
+    for (const vote of proof.votes) {
+      const canonical = canonicalize(vote.state);
+      const publicKey = vote.authorityId; // Assuming ID is the key for simplicity in demo
+      const valid = await verifySignature(canonical, vote.signature, publicKey);
+      if (!valid) {
+        allSigsValid = false;
+        addLog(`! VOTE TAMPER detected for Authority: ${vote.authorityId}`);
+      }
+    }
+
+    setAnalysis({
+      hashMatch: allSigsValid,
+      signatureValid: allSigsValid,
+      isTrusted: !!result.winner,
+      signalStable: true
+    });
+
+    if (!result.winner) setState("BROKEN");
+    else if (result.isSymmetricTie) setState("SYMMETRY_RESOLVED");
+    else if (!allSigsValid) setState("TRANSFORMED");
+    else setState("VERIFIED");
+
+    addLog("Consensus Audit complete.");
   };
 
   const verifyMediaAsset = async (file: File) => {
